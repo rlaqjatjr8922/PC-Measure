@@ -79,7 +79,7 @@ async def run_feature(group: str, feature: str, request: Request):
         raise HTTPException(400,'잘못된 기능 경로입니다.')
     feature_config = get_feature_config(group,feature)
     origin = request.headers.get('origin')
-    if origin and origin not in ('http://127.0.0.1:8000','http://localhost:8000'):
+    if origin and origin not in ('http://127.0.0.1:8002','http://localhost:8002'):
         raise HTTPException(403,'다른 웹사이트에서 호출할 수 없습니다.')
     # Only the local user/client gets this key. Never include it in model arguments.
     user_only = group == 'history' or group == 'interaction' and feature in ('answer','questions')
