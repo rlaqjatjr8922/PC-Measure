@@ -45,7 +45,7 @@ python server.py
 선택한 작업: Inventory 개발
 ```
 
-기본 서버 주소는 `http://127.0.0.1:8000`이며 `config.py`의 `HOST`, `PORT`를 사용합니다.
+기본 서버 주소는 `http://127.0.0.1:8002`이며 `config.py`의 `HOST`, `PORT`를 사용합니다.
 
 ## 실행 순서
 
