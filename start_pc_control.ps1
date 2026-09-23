@@ -28,16 +28,6 @@ $PinggyApiPort = 4300
 $DiscordWebhook = "https://discord.com/api/webhooks/1551901664942886983/jweaYpklgGGahbHW_aay-ZDffCs4zR3SlVzd4WzMxJqUHk_LvlZjucbDf60LS60jXI9w"
 
 # ============================================================
-# 고정 중계 서버
-# Pinggy에서 새 공개 URL을 얻으면 이 서버에 전달
-# UPDATE_TOKEN은 GitHub에 올리지 않고 Windows 환경 변수로 보관
-#   setx PC_CONTROL_UPDATE_TOKEN "토큰값"
-# ============================================================
-
-$RelayServer = "https://pro-status-light-prime.trycloudflare.com"
-$UpdateToken = $env:PC_CONTROL_UPDATE_TOKEN
-
-# ============================================================
 # Pinggy 로그
 # ============================================================
 
@@ -302,98 +292,6 @@ function Send-DiscordLink {
         Write-Host $_.Exception.Message
         Write-Host ""
         Write-Host "[GPT URL]"
-        Write-Host $Url
-
-        return $false
-    }
-}
-
-# ============================================================
-# 고정 중계 서버에 현재 Pinggy URL 전달
-#
-# POST /__admin/upstream
-# Authorization: Bearer <UPDATE_TOKEN>
-# Content-Type: application/json
-#
-# {
-#   "url": "https://xxxxx.free.pinggy.net"
-# }
-# ============================================================
-
-function Send-UpstreamUrl {
-
-    param(
-        [string]$Url
-    )
-
-    if ([string]::IsNullOrWhiteSpace($Url)) {
-
-        Write-Host ""
-        Write-Host "[ERROR] Upstream URL is empty."
-
-        return $false
-    }
-
-    if ([string]::IsNullOrWhiteSpace($UpdateToken)) {
-
-        Write-Host ""
-        Write-Host "[ERROR] PC_CONTROL_UPDATE_TOKEN is not configured."
-        Write-Host "[INFO] Configure it once, then reopen PowerShell:"
-        Write-Host 'setx PC_CONTROL_UPDATE_TOKEN "토큰값"'
-
-        return $false
-    }
-
-    $Endpoint = $RelayServer.TrimEnd("/") + "/__admin/upstream"
-
-    try {
-
-        $Payload = @{
-            url = $Url
-        }
-
-        $Json = $Payload | ConvertTo-Json -Compress
-        $Utf8 = [System.Text.Encoding]::UTF8.GetBytes($Json)
-
-        $Headers = @{
-            Authorization = "Bearer $UpdateToken"
-        }
-
-        $Response = Invoke-RestMethod `
-            -Uri $Endpoint `
-            -Method Post `
-            -Headers $Headers `
-            -ContentType "application/json; charset=utf-8" `
-            -Body $Utf8
-
-        if (
-            $null -ne $Response -and
-            $null -ne $Response.success -and
-            -not [bool]$Response.success
-        ) {
-
-            Write-Host ""
-            Write-Host "[ERROR] Relay server rejected the URL."
-
-            if ($null -ne $Response.error) {
-                Write-Host "[SERVER] $($Response.error)"
-            }
-
-            return $false
-        }
-
-        Write-Host "[OK] Upstream URL sent to relay server."
-        Write-Host "[UPSTREAM] $Url"
-
-        return $true
-    }
-    catch {
-
-        Write-Host ""
-        Write-Host "[ERROR] Failed to send upstream URL."
-        Write-Host $_.Exception.Message
-        Write-Host ""
-        Write-Host "[UPSTREAM]"
         Write-Host $Url
 
         return $false
@@ -1039,11 +937,11 @@ Write-Host $GptUrl
 Write-Host ""
 
 # ============================================================
-# [4/4] Discord + 고정 중계 서버 전송
+# [4/4] Discord Webhook
 # ============================================================
 
 Write-Host "========================================"
-Write-Host "[4/4] Sending Links"
+Write-Host "[4/4] Sending Discord Link"
 Write-Host "========================================"
 Write-Host ""
 
@@ -1053,15 +951,6 @@ if (-not $DiscordSent) {
 
     Write-Host ""
     Write-Host "[WARNING] Discord send failed."
-}
-
-$UpstreamSent = Send-UpstreamUrl $PublicUrl
-
-if (-not $UpstreamSent) {
-
-    Write-Host ""
-    Write-Host "[WARNING] Relay update failed."
-    Write-Host "[INFO] Local server and Pinggy tunnel will keep running."
 }
 
 # ============================================================
