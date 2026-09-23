@@ -518,12 +518,25 @@ Remove-Item $PinggyStderr -Force -ErrorAction SilentlyContinue
 
 # ============================================================
 # [1/4] server.py 실행
-# 기존 Mission 선택 방식 유지
+# server.py에서 프로젝트를 먼저 선택한 뒤에만 8002 서버가 열림
 # ============================================================
+
+if (-not (Test-LocalPortFree $ServerPort)) {
+
+    Write-Host ""
+    Write-Host "[ERROR] Port $ServerPort is already in use."
+    Write-Host "[INFO] 기존 PC-Control 서버를 종료한 뒤 다시 실행하세요."
+
+    Read-Host "Press Enter"
+    exit 1
+}
 
 Write-Host "========================================"
 Write-Host "[1/4] Starting server.py"
 Write-Host "========================================"
+Write-Host ""
+Write-Host "[INFO] 새 창에서 프로젝트를 선택하세요."
+Write-Host "[INFO] 프로젝트 선택이 끝날 때까지 여기서 계속 기다립니다."
 Write-Host ""
 
 $ServerCommand = "& '$Python' '$Server'"
@@ -531,7 +544,6 @@ $ServerCommand = "& '$Python' '$Server'"
 $ServerProcess = Start-Process `
     -FilePath "powershell.exe" `
     -ArgumentList @(
-        "-NoExit",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
@@ -541,12 +553,13 @@ $ServerProcess = Start-Process `
     -PassThru
 
 # ============================================================
-# [2/4] Mission 선택 + 8002 포트 대기
+# [2/4] 프로젝트 선택 완료 + 8002 서버 시작 대기
 # ============================================================
 
-Write-Host "[2/4] Waiting for Mission selection..."
+Write-Host "[2/4] Waiting for project selection..."
 Write-Host ""
-Write-Host "Select Mission in the server.py window."
+Write-Host "[WAIT] server.py 창에서 프로젝트를 선택하세요."
+Write-Host "[WAIT] 127.0.0.1:$ServerPort 가 실제로 열릴 때까지 Pinggy는 시작하지 않습니다."
 Write-Host ""
 
 $ServerReady = $false
@@ -598,6 +611,7 @@ while (-not $ServerReady) {
 }
 
 Write-Host ""
+Write-Host "[OK] Project selected."
 Write-Host "[OK] Server running:"
 Write-Host "http://${LocalHost}:${ServerPort}"
 Write-Host ""
