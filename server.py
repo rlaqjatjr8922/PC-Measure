@@ -144,6 +144,72 @@ async def run_feature(group: str, feature: str, request: Request):
         rt.context.reset(token)
 
 
+def timed_startup_choice(prompt, timeout_seconds=100):
+    """
+    Windows 콘솔에서 지정 시간 동안 아무 키 입력이 없으면 None 반환.
+    사용자가 입력을 시작하면 시간 제한을 해제하고 Enter까지 기다림.
+    Windows가 아닌 환경에서는 일반 input() 사용.
+    """
+    import os
+    import sys
+    import time
+
+    if os.name != 'nt':
+        return input(prompt).strip()
+
+    import msvcrt
+
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    chars = []
+    deadline = time.monotonic() + timeout_seconds
+    typing_started = False
+
+    while True:
+        if msvcrt.kbhit():
+            ch = msvcrt.getwch()
+
+            # Ctrl+C
+            if ch == '\x03':
+                raise KeyboardInterrupt
+
+            # Enter
+            if ch in ('\r', '\n'):
+                sys.stdout.write('\n')
+                sys.stdout.flush()
+                return ''.join(chars).strip()
+
+            # Backspace
+            if ch == '\b':
+                if chars:
+                    chars.pop()
+                    sys.stdout.write('\b \b')
+                    sys.stdout.flush()
+                typing_started = True
+                continue
+
+            # 방향키/F키 같은 확장키는 무시
+            if ch in ('\x00', '\xe0'):
+                if msvcrt.kbhit():
+                    msvcrt.getwch()
+                typing_started = True
+                continue
+
+            chars.append(ch)
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            typing_started = True
+            continue
+
+        if not typing_started and time.monotonic() >= deadline:
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+            return None
+
+        time.sleep(0.05)
+
+
 def select_startup_mission():
     from core.missions import history
 
@@ -159,7 +225,17 @@ def select_startup_mission():
             print(f"{index}. {mission['name']}")
         print('0. 새 작업\n')
 
-        choice = input('선택 > ').strip()
+        print('100초 동안 입력이 없으면 1번 프로젝트로 자동 실행합니다.')
+        choice = timed_startup_choice('선택 > ', timeout_seconds=100)
+
+        if choice is None:
+            if missions:
+                choice = '1'
+                print('100초 동안 입력이 없어 1번 프로젝트를 자동 선택합니다.')
+            else:
+                print('자동 선택할 기존 프로젝트가 없습니다.')
+                continue
+
         if not choice.isascii() or not choice.isdecimal():
             print('목록에 있는 번호를 입력하세요.')
             continue
