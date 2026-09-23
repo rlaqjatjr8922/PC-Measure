@@ -15,10 +15,17 @@ Set-Location $BaseDir
 $Server = Join-Path $BaseDir "server.py"
 
 $LocalHost = "127.0.0.1"
-$ServerPort = 8000
+$ServerPort = 8002
 
 # Pinggy Web Debugger용 로컬 포트
 $PinggyApiPort = 4300
+
+# ============================================================
+# Discord Webhook
+# 기존 Discord 링크 전송 기능 유지
+# ============================================================
+
+$DiscordWebhook = "https://discord.com/api/webhooks/1551901664942886983/jweaYpklgGGahbHW_aay-ZDffCs4zR3SlVzd4WzMxJqUHk_LvlZjucbDf60LS60jXI9w"
 
 # ============================================================
 # 고정 중계 서버
@@ -247,6 +254,58 @@ function Get-PinggyUrlFromApi {
     }
 
     return $null
+}
+
+# ============================================================
+# Discord Webhook 전송
+# ============================================================
+
+function Send-DiscordLink {
+
+    param(
+        [string]$Url
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DiscordWebhook)) {
+
+        Write-Host ""
+        Write-Host "[WARNING] Discord Webhook URL not configured."
+        Write-Host "[URL] $Url"
+
+        return $false
+    }
+
+    try {
+
+        $Payload = @{
+            content = $Url
+        }
+
+        $Json = $Payload | ConvertTo-Json -Compress
+        $Utf8 = [System.Text.Encoding]::UTF8.GetBytes($Json)
+
+        Invoke-RestMethod `
+            -Uri $DiscordWebhook `
+            -Method Post `
+            -ContentType "application/json; charset=utf-8" `
+            -Body $Utf8 `
+            | Out-Null
+
+        Write-Host "[OK] Discord webhook sent."
+
+        return $true
+    }
+    catch {
+
+        Write-Host ""
+        Write-Host "[ERROR] Discord webhook failed."
+        Write-Host $_.Exception.Message
+        Write-Host ""
+        Write-Host "[GPT URL]"
+        Write-Host $Url
+
+        return $false
+    }
 }
 
 # ============================================================
@@ -584,7 +643,7 @@ $ServerProcess = Start-Process `
     -PassThru
 
 # ============================================================
-# [2/4] Mission 선택 + 8000 포트 대기
+# [2/4] Mission 선택 + 8002 포트 대기
 # ============================================================
 
 Write-Host "[2/4] Waiting for Mission selection..."
@@ -980,13 +1039,21 @@ Write-Host $GptUrl
 Write-Host ""
 
 # ============================================================
-# [4/4] 고정 중계 서버에 Pinggy URL 전달
+# [4/4] Discord + 고정 중계 서버 전송
 # ============================================================
 
 Write-Host "========================================"
-Write-Host "[4/4] Sending Upstream URL"
+Write-Host "[4/4] Sending Links"
 Write-Host "========================================"
 Write-Host ""
+
+$DiscordSent = Send-DiscordLink $GptUrl
+
+if (-not $DiscordSent) {
+
+    Write-Host ""
+    Write-Host "[WARNING] Discord send failed."
+}
 
 $UpstreamSent = Send-UpstreamUrl $PublicUrl
 
