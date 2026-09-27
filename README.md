@@ -66,7 +66,7 @@ Mission 선택은 서버 시작 전에 사용자가 직접 합니다. GPT 실행
 
 기존 `/{group}/{feature}` 호출 구조와 `api_config.py`의 등록·필수값·기본값 검사는 유지됩니다. PNG/JPEG bytes는 이미지로, 일반 결과는 JSON으로 반환합니다.
 
-터미널에서 Mission을 선택해도 기존 API의 헤더 검사는 유지됩니다. 현재 구현에서 사용자 클라이언트는 서버 내부 `.private/user.key` 값을 `X-User-Key` 헤더에 사용하며, 실행 연결은 사용자 선택 API 응답의 `context_id`를 `X-Mission-Context` 헤더에 사용합니다. 터미널은 키나 연결값을 출력하지 않습니다. 인증정보를 GPT에게 전달하지 않습니다.
+API 호출에는 별도의 인증 키나 Mission 연결 헤더가 필요하지 않습니다. 요청은 서버에서 현재 선택된 Mission에 연결됩니다. Mission 관련 기능을 사용하기 전에 작업을 선택해야 합니다.
 
 ## 저장 및 검증
 
@@ -232,7 +232,7 @@ tolerance는 픽셀 채널 차이 허용값(0~255, 기본 0)입니다. 캡처 �
 
 ### Mission 선택 / History (`history`)
 
-모든 history API는 사용자 전용입니다. create/select는 Mission 데이터, 작업기록, context_id를 반환하며 GPT가 임의로 선택하지 않습니다. 실행 중인 Mission은 완료/중단 후 전환합니다. 데이터는 서버 재시작 후에도 유지됩니다.
+history API는 별도의 헤더 없이 호출할 수 있습니다. create/select는 Mission 데이터, 작업기록, context_id를 반환하며 context_id를 다음 요청에 전달할 필요는 없습니다. 실행 중인 Mission은 완료/중단 후 전환합니다. 데이터는 서버 재시작 후에도 유지됩니다.
 
 | 엔드포인트 | 기능 | mode | 호출값 / 기본값 |
 |---|---|---|---|

@@ -33,7 +33,7 @@ class Endpoints(unittest.TestCase):
         macros.replaying=False
         self.client=TestClient(server.app)
         self.addCleanup(self.client.close)
-        self.user={'x-user-key':rt.user_key()}
+        self.user={}
         self.headers={}
 
     def call(self,path,body=None,user=False):
@@ -43,7 +43,7 @@ class Endpoints(unittest.TestCase):
         res=self.call('/history/create',{'name':name},True)
         self.assertEqual(res.status_code,200,res.text)
         result=res.json()['result']
-        self.headers={'x-mission-context':result['context_id']}
+        self.headers={}
         return result['mission']
 
     def png(self,color):
@@ -68,19 +68,19 @@ class Endpoints(unittest.TestCase):
         self.assertEqual(self.client.post('/system/status',content='{').status_code,400)
 
     def test_mission_history_isolation_and_restart(self):
-        self.assertEqual(self.call('/history/create',{'name':'bad'}).status_code,403)
         self.assertEqual(self.call('/mission/status',{'mode':'get'}).status_code,409)
         a=self.select('첫 작업')
         self.assertEqual(self.call('/mission/plan',{'mode':'write','text':'계획 A'}).status_code,200)
         self.assertEqual(self.call('/mission/workflow',{'mode':'write','text':'수정','version':0}).status_code,409)
         self.assertEqual(self.call('/mission/work_log',{'mode':'add','entry':{'action':'test','success':True}}).status_code,200)
-        first_headers=dict(self.headers)
+        first_headers={'x-mission-context':rt.active['generation'], 'x-user-key':'unused'}
         b=self.select('둘째 작업')
         self.assertEqual(self.call('/mission/work_log',{'mode':'list'}).json()['result'],[])
         stale=self.client.post('/mission/status',json={'mode':'get'},headers=first_headers)
-        self.assertEqual(stale.status_code,409)
+        self.assertEqual(stale.status_code,200)
+        self.assertEqual(stale.json()['result']['id'],b['id'])
         res=self.call('/history/select',{'mission_id':a['id']},True).json()['result']
-        self.headers={'x-mission-context':res['context_id']}
+        self.headers={}
         self.assertEqual(res['mission']['plan'],'계획 A')
         self.assertEqual(len(res['work_log']),1)
         self.assertEqual(len(self.call('/history/load',{'mission_id':a['id']},True).json()['result']['work_log']),1)
@@ -139,8 +139,8 @@ class Endpoints(unittest.TestCase):
         self.select()
         question=self.call('/interaction/ask_user',{'question':'어느 파일?'}).json()['result']
         self.assertEqual(question['state'],'pending')
-        self.assertEqual(self.call('/interaction/answer',{'question_id':question['id'],'answer':'A'}).status_code,403)
-        self.assertEqual(self.call('/interaction/answer',{'question_id':question['id'],'answer':'A'},True).status_code,200)
+        self.assertEqual(self.call('/interaction/questions').status_code,200)
+        self.assertEqual(self.call('/interaction/answer',{'question_id':question['id'],'answer':'A'}).status_code,200)
         self.assertEqual(self.call('/interaction/status',{'question_id':question['id']}).json()['result']['answer'],'A')
         self.assertEqual(self.call('/watch/start').status_code,409)
         self.assertEqual(self.call('/watch/list').json()['result'],[])
@@ -232,9 +232,11 @@ class Endpoints(unittest.TestCase):
         self.assertEqual(result,[409])
         self.assertLess(time.monotonic()-start,1)
 
-    def test_missing_context_and_audit_errors(self):
+    def test_headerless_control_and_audit_errors(self):
         self.select()
-        self.assertEqual(self.client.post('/keyboard/press',json={'key':'a'}).status_code,409)
+        with patch('core.desktop.keyboard',return_value={'keys':['a']}) as keyboard:
+            self.assertEqual(self.client.post('/keyboard/press',json={'key':'a'}).status_code,200)
+            keyboard.assert_called_once()
         with patch('core.system_ops.system',side_effect=RuntimeError('internal test error')):
             self.assertEqual(self.call('/system/info').status_code,500)
         last=json.loads((rt.PRIVATE/'server.jsonl').read_text(encoding='utf-8').splitlines()[-1])
