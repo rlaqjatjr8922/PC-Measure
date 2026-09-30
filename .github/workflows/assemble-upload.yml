@@ -1,0 +1,29 @@
+name: Assemble uploaded PC Measure executable
+on:
+  push:
+    branches: [codex/upload-pc-measure-20260930]
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore and verify executable
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib
+          parts = sorted(Path(".github/exe-transfer").glob("part-*"))
+          assert len(parts) == 4
+          data = b"".join(p.read_bytes() for p in parts)
+          assert len(data) == 47617198
+          assert hashlib.sha256(data).hexdigest() == "bd1c75c078e8fd50a64f149fa269bdfb8aee939b8a1bcd88950bd0044fc4e2d1"
+          Path("PC-Measure.exe").write_bytes(data)
+      - name: Save verified executable on transfer branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PC-Measure.exe
+          git commit -m "Assemble verified PC Measure executable"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

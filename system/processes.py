@@ -1,4 +1,6 @@
-from core.system_ops import system
-
-def run(**kwargs):
-    return system('processes', **kwargs)
+def run(**kw):
+    import psutil
+    result = []
+    for p in psutil.process_iter(['pid', 'name', 'status']):
+        result.append(p.info)
+    return result
