@@ -1,4 +1,15 @@
-from core.desktop import mouse
+import ctypes
+try:
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+except (AttributeError, OSError):
+    pass
 
-def run(**kwargs):
-    return mouse('position', **kwargs)
+def _gui():
+    import pyautogui
+    pyautogui.PAUSE = 0
+    return pyautogui
+
+def run(**kw):
+    g = _gui()
+    x, y = g.position()
+    return {'x': x, 'y': y}

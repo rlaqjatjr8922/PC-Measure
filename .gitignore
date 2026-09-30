@@ -1,7 +1,12 @@
-.private/
 __pycache__/
 *.py[cod]
-.env
-.env.*
-!.env.example
 .private/
+.logs/
+data/
+*.log
+.env
+launcher_settings.json
+build/
+dist/
+*.spec
+cloudflared.exe

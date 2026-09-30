@@ -1,285 +1,98 @@
+"""등록된 /그룹/기능 요청을 해당 파일의 run()으로 전달합니다."""
+import importlib.util
+import json
+import time
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
-import config
 import api_config
-from core import runtime as rt
-from core.audit import Audit, redact
-from core.dispatch import execute
-from contextlib import asynccontextmanager
+import config
+
+app = FastAPI(title='PC Measure', docs_url=None, redoc_url=None, openapi_url=None)
+BASE_DIR = Path(__file__).resolve().parent
 
 
-@asynccontextmanager
-async def lifespan(app):
-    rt.init()
+@app.middleware('http')
+async def request_statistics(request, call_next):
+    started = time.monotonic()
+    status = 500
     try:
-        yield
+        response = await call_next(request)
+        status = response.status_code
+        return response
     finally:
-        await run_in_threadpool(rt.stop, '서버 종료')
+        with config.lock:
+            config.stats['requests'] += 1
+            config.stats['errors'] += int(status >= 400)
+            config.stats['duration_ms'] += (time.monotonic() - started) * 1000
 
 
-app = FastAPI(title='PC Control Server', lifespan=lifespan)
-app.add_middleware(Audit)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-BASE_DIR = rt.BASE
-
-
-def get_feature_config(group, feature):
-    group_config = getattr(api_config, group, None)
-    if not isinstance(group_config, dict) or feature not in group_config:
-        raise HTTPException(404, 'api_config.py에 등록되지 않은 기능입니다.')
-    return group_config[feature]
-
-
-def remove_empty_request_values(data):
-    return {k:v for k,v in data.items() if v is not None and v != ''}
-
-
-def build_arguments(feature_config, request_values):
+def execute(group, feature, values):
+    schema = getattr(api_config, group, None)
+    if group.startswith('_') or not isinstance(schema, dict) or feature not in schema:
+        raise HTTPException(404, '등록되지 않은 기능입니다.')
+    schema = schema[feature]
     arguments = {}
-    if 'mode' in feature_config:
-        modes = feature_config['mode']
-        mode = request_values.get('mode')
-        if mode is None and len(modes) == 1:
-            mode = next(iter(modes))
-        if not isinstance(mode,str) or mode not in modes:
-            raise HTTPException(400, {'error':'올바른 mode가 필요합니다.','available_modes':list(modes)})
+    if 'mode' in schema:
+        modes = schema['mode']
+        mode = values.get('mode', next(iter(modes)) if len(modes) == 1 else None)
+        if not isinstance(mode, str) or mode not in modes:
+            raise HTTPException(400, '올바른 mode가 필요합니다.')
         arguments['mode'] = mode
-        fields = modes[mode]
-    else:
-        fields = feature_config
-    unknown = set(request_values)-set(fields)-({'mode'} if 'mode' in feature_config else set())
-    if unknown:
-        raise HTTPException(400, {'error':'등록되지 않은 호출값입니다.','unknown':sorted(unknown)})
-    missing = []
-    for key, default in fields.items():
-        value = request_values.get(key,default)
+        schema = modes[mode]
+    if set(values) - set(schema) - set(arguments):
+        raise HTTPException(400, '등록되지 않은 입력값입니다.')
+    for key, default in schema.items():
+        value = values.get(key, default)
         if value is None or value == '':
-            missing.append(key)
-        else:
-            arguments[key] = value
-    if missing:
-        raise HTTPException(400, {'error':'필수 호출값이 비어 있습니다.','missing':missing})
-    return arguments
+            raise HTTPException(400, '필수 값이 없습니다: ' + key)
+        if isinstance(default, (dict, list)) and isinstance(value, str):
+            value = json.loads(value)
+        arguments[key] = value
+    path = (BASE_DIR / group / (feature + '.py')).resolve()
+    if not path.is_relative_to(BASE_DIR) or not path.is_file():
+        raise HTTPException(404, '기능 파일을 찾을 수 없습니다.')
+    spec = importlib.util.spec_from_file_location('feature_' + group + '_' + feature, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.run(**arguments)
 
 
-@app.exception_handler(HTTPException)
-async def http_error(request, error):
-    return JSONResponse({'success':False,'error':redact(error.detail)}, status_code=error.status_code)
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_error(request, error):
-    return JSONResponse({'success':False,'error':'잘못된 요청 형식입니다.'}, status_code=422)
-
-
-@app.api_route('/{group}/{feature}', methods=['GET','POST'])
+@app.api_route('/{group}/{feature}', methods=['GET', 'POST'])
 async def run_feature(group: str, feature: str, request: Request):
-    if not group.replace('_','').isalnum() or not feature.replace('_','').isalnum():
-        raise HTTPException(400,'잘못된 기능 경로입니다.')
-
-    feature_config = get_feature_config(group,feature)
-
-    values = dict(request.query_params)
-
-    if request.method == 'POST':
-        raw = await request.body()
-        if len(raw) > 48*1024*1024:
-            raise HTTPException(413,'요청이 너무 큽니다.')
-        if raw:
-            try:
-                body = await request.json()
-            except ValueError:
-                raise HTTPException(400,'올바른 JSON이 필요합니다.')
-            if not isinstance(body,dict):
-                raise HTTPException(400,'JSON 객체가 필요합니다.')
-            values.update(body)
-
-    arguments = build_arguments(feature_config,remove_empty_request_values(values))
-
-    public_status = group == 'system' and feature in ('status','info','telemetry')
-
-    if group not in ('history', 'safety') and not public_status:
-        if not rt.active:
-            raise HTTPException(409,'사용자가 먼저 Mission을 선택해야 합니다.')
-
-    token = rt.context.set(dict(rt.active) if rt.active else None)
-
     try:
-        if group in ('mission','temp','macro','watch','interaction'):
-            rt.current()
-
-        if group == 'history':
-            from core import macros
-            if macros.recording or macros.replaying:
-                if feature in ('create','select'):
-                    raise HTTPException(409,'매크로 기록/재생을 먼저 중지하세요.')
-
-        result = await run_in_threadpool(execute,group,feature,arguments)
-
-        if isinstance(result,bytes):
+        if not group.replace('_', '').isalnum() or not feature.replace('_', '').isalnum():
+            raise HTTPException(400, '잘못된 기능 경로입니다.')
+        values = dict(request.query_params)
+        if request.method == 'POST':
+            raw = await request.body()
+            if len(raw) > 48 * 1024 * 1024:
+                raise HTTPException(413, '요청이 너무 큽니다.')
+            if raw:
+                body = json.loads(raw)
+                if not isinstance(body, dict):
+                    raise HTTPException(400, 'JSON 객체가 필요합니다.')
+                values.update(body)
+        result = await run_in_threadpool(execute, group, feature, values)
+        if isinstance(result, bytes):
             mime = 'image/png' if result.startswith(b'\x89PNG') else 'image/jpeg' if result.startswith(b'\xff\xd8') else 'application/octet-stream'
-            return Response(result,media_type=mime)
-
-        return JSONResponse({'success':True,'group':group,'feature':feature,'result':redact(result)})
-
-    except HTTPException:
-        raise
+            return Response(result, media_type=mime)
+        return JSONResponse({'success': True, 'group': group, 'feature': feature, 'result': result})
+    except HTTPException as exc:
+        return JSONResponse({'success': False, 'error': exc.detail}, status_code=exc.status_code)
     except FileNotFoundError:
-        raise HTTPException(404,'파일을 찾을 수 없습니다.')
+        return JSONResponse({'success': False, 'error': '파일을 찾을 수 없습니다.'}, status_code=404)
     except FileExistsError:
-        raise HTTPException(409,'대상이 이미 존재합니다.')
+        return JSONResponse({'success': False, 'error': '대상이 이미 존재합니다.'}, status_code=409)
     except PermissionError:
-        raise HTTPException(403,'접근 권한이 없습니다.')
-    except (ValueError,TypeError,KeyError,UnicodeError) as exc:
-        raise HTTPException(400, '호출값 오류: '+type(exc).__name__)
-    except Exception as exc:
-        import traceback
-        request.scope['execution_error'] = redact(traceback.format_exc())
-        raise HTTPException(500,'기능 실행 실패: '+type(exc).__name__)
-    finally:
-        rt.context.reset(token)
-
-
-def timed_startup_choice(prompt, timeout_seconds=100):
-    """
-    Windows 콘솔에서 지정 시간 동안 아무 키 입력이 없으면 None 반환.
-    사용자가 입력을 시작하면 시간 제한을 해제하고 Enter까지 기다림.
-    Windows가 아닌 환경에서는 일반 input() 사용.
-    """
-    import os
-    import sys
-    import time
-
-    if os.name != 'nt':
-        return input(prompt).strip()
-
-    import msvcrt
-
-    sys.stdout.write(prompt)
-    sys.stdout.flush()
-
-    chars = []
-    deadline = time.monotonic() + timeout_seconds
-    typing_started = False
-
-    while True:
-        if msvcrt.kbhit():
-            ch = msvcrt.getwch()
-
-            if ch == '\x03':
-                raise KeyboardInterrupt
-
-            if ch in ('\r', '\n'):
-                sys.stdout.write('\n')
-                sys.stdout.flush()
-                return ''.join(chars).strip()
-
-            if ch == '\b':
-                if chars:
-                    chars.pop()
-                    sys.stdout.write('\b \b')
-                    sys.stdout.flush()
-                typing_started = True
-                continue
-
-            if ch in ('\x00', '\xe0'):
-                if msvcrt.kbhit():
-                    msvcrt.getwch()
-                typing_started = True
-                continue
-
-            chars.append(ch)
-            sys.stdout.write(ch)
-            sys.stdout.flush()
-            typing_started = True
-            continue
-
-        if not typing_started and time.monotonic() >= deadline:
-            sys.stdout.write('\n')
-            sys.stdout.flush()
-            return None
-
-        time.sleep(0.05)
-
-
-def select_startup_mission():
-    from core.missions import history
-
-    rt.init()
-
-    print('\n========================================')
-    print(' PC-Control-Server')
-    print('========================================')
-
-    while True:
-        missions = history('list')
-
-        print('\n작업을 선택하세요.\n')
-
-        for index, mission in enumerate(missions, start=1):
-            print(f"{index}. {mission['name']}")
-
-        print('0. 새 작업\n')
-
-        print('100초 동안 입력이 없으면 1번 프로젝트로 자동 실행합니다.')
-
-        choice = timed_startup_choice('선택 > ', timeout_seconds=100)
-
-        if choice is None:
-            if missions:
-                choice = '1'
-                print('100초 동안 입력이 없어 1번 프로젝트를 자동 선택합니다.')
-            else:
-                print('자동 선택할 기존 프로젝트가 없습니다.')
-                continue
-
-        if not choice.isascii() or not choice.isdecimal():
-            print('목록에 있는 번호를 입력하세요.')
-            continue
-
-        if choice == '0':
-            name = input('새 작업 이름 > ').strip()
-
-            if not name or len(name) > 120:
-                print('작업 이름은 1~120자로 입력하세요.')
-                continue
-
-            selected = history('create', name=name)
-
-        else:
-            index = next((i for i in range(len(missions)) if choice == str(i + 1)), None)
-
-            if index is None:
-                print('목록에 있는 번호를 입력하세요.')
-                continue
-
-            selected = history('select', mission_id=missions[index]['id'])
-
-        print(f"\n선택한 작업: {selected['mission']['name']}")
-        return selected
-
-
-def main():
-    import uvicorn
-
-    try:
-        select_startup_mission()
-
-    except (EOFError, KeyboardInterrupt):
-        print('\n작업 선택을 취소했습니다. 서버를 시작하지 않습니다.')
-        return
-
-    uvicorn.run(app,host=config.HOST,port=config.PORT)
+        return JSONResponse({'success': False, 'error': '접근 권한이 없습니다.'}, status_code=403)
+    except (ValueError, TypeError, KeyError, UnicodeError) as exc:
+        return JSONResponse({'success': False, 'error': '잘못된 입력: ' + type(exc).__name__}, status_code=400)
+    except Exception:
+        return JSONResponse({'success': False, 'error': '기능 실행 실패'}, status_code=500)
 
 
 if __name__ == '__main__':
-    main()
+    import uvicorn
+    uvicorn.run(app, host=config.HOST, port=config.PORT)
