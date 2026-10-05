@@ -13,7 +13,7 @@ $serverPy   = Join-Path $projectDir 'server.py'
 $configPy   = Join-Path $projectDir 'config.py'
 $logDir     = Join-Path $projectDir '.logs\send-discord-link'
 
-$webhookUrl = 'YOUR_DISCORD_WEBHOOK_URL'
+$webhookUrl = 'https://discordapp.com/api/webhooks/1554745726423007285/2V4cS3K-4y4cECXu-smWEBEAfOpyjqT9tcvy4TjaxYFtgIO560vPUWcce4HPoBxb6lu4'
 
 function Write-Step([string]$Text) {
     Write-Host "[+] $Text" -ForegroundColor Cyan

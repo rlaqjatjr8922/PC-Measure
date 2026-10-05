@@ -4,8 +4,7 @@ __pycache__/
 *.log
 .pytest_cache/
 data/
-launcher_settings.json
-api 키.txt
-.env
-.env.*
 last-result.txt
+/제오용/api 키.txt
+/제오용/새 텍스트 문서.txt
+/제오용/PC-Control-Server/config.py
