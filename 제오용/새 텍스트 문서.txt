@@ -1,0 +1,13 @@
+
+한번만
+.\tunnel-client.exe init --sample sample_mcp_remote_no_auth --profile pc-control --tunnel-id tunnel_6ab8f159ba288191966b64671bff3748 --mcp-server-url http://127.0.0.1:8000
+
+
+개속
+
+$env:CONTROL_PLANE_API_KEY="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"
+
+
+.\tunnel-client.exe run --profile pc-control
+
+
