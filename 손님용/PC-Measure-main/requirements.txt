@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+httpx
+pyautogui
+pywin32; sys_platform == "win32"
+mss
+Pillow
+psutil
+
+pynput

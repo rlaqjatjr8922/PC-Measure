@@ -1,0 +1,36 @@
+﻿PC Measure 수정 안내 (2026-10-04)
+
+실행: 손님용 폴더의 PC-Measure.exe를 더블클릭합니다.
+손님 화면: 제목, 실행 상태, 로그, 종료 버튼만 표시됩니다.
+서버와 Cloudflare는 별도 콘솔 창 없이 실행됩니다. 종료 버튼은 함께 정리합니다.
+일반 실행.cmd와 관리자 실행.ps1도 같은 실행 파일을 사용합니다.
+
+변경 사항
+- 마우스 5개 기능과 input_mouse가 공통 SendInput 좌표 이동을 사용합니다.
+- 다중 모니터와 음수 좌표를 처리하고, Windows 입력 거부는 명확히 반환합니다.
+- 창 포커스 전환을 보강하고 실패 시 FOCUS_DENIED 오류를 반환합니다.
+- calc.exe 같은 시스템 프로그램 이름과 .exe 절대 경로를 지원합니다.
+- 프로그램 실행에만 하드링크 파일을 허용합니다. 파일 편집/조회 보호는 유지합니다.
+- Watch 시작/조회/중지/목록을 구현했습니다.
+
+Watch 사용
+기본: screen_changed, 기본 모니터, 1초 간격, 300초 제한.
+condition: screen_changed / file_exists / file_changed / window_exists
+파일 조건: target={"path":"C:\\example\\file.txt"}
+창 조건: target={"hwnd":12345}
+options={"interval":1,"timeout":300}
+반환된 id 또는 watch_id를 status/stop의 watch_id로 전달합니다.
+최대 16개 동시 실행. 종료/긴급 중지 시 중단합니다.
+
+제어 서버도 다시 시작하고 연결 도구 목록을 새로 불러와야 Watch 입력 항목이 반영됩니다.
+OpenAI 측 history_delete 차단은 앱에서 해제하지 않습니다.
+기존 테스트 기록 0cc36962b23e는 보존했습니다.
+실제 운영 서버의 kill_switch는 호출하지 않았습니다.
+
+검증
+손님용 단위/회귀 검사 36개, 제어 서버 검사 18개 통과.
+별도 임시 기록으로 history_delete 삭제 및 경로 검사 통과.
+새 EXE: 66개 모듈 로딩, 로컬 HTTP, 파일 작업, Watch 생명주기 검사 통과.
+화면 미리보기와 종료 버튼 확인. 검사용 Discord 전송/공개 터널 연결은 하지 않았습니다.
+실제 Windows 권한, 잠금 화면, 원격 고객 PC 상태에 따른 입력/포커스는 해당 PC에서 확인해야 합니다.
+이 결과는 전체 도구의 실제 입력을 74회 재호출한 결과가 아닙니다.

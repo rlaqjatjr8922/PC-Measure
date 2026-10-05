@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.logs/
+*.log
+.pytest_cache/
+data/
+launcher_settings.json
+api 키.txt
+.env
+.env.*
+last-result.txt
