@@ -6,7 +6,8 @@ from remote import resolver
 import api_config
 import capture_store
 GROUPS=('mouse','keyboard','window','system','files','temp','screen','verify','watch','interaction','safety','input','recording','macro')
-ALLOWED_PATHS=frozenset('/'+g+'/'+f for g in GROUPS for f in getattr(api_config,g))
+ALLOWED_PATHS=frozenset('/'+g+'/'+f for g in GROUPS for f in getattr(api_config,g)
+                        if g+'_'+f not in getattr(api_config,'_mcp_only',set()))
 
 def request(path,parameters=None,method='POST'):
     if path not in ALLOWED_PATHS or method not in ('GET','POST') or (parameters is not None and not isinstance(parameters,dict)):

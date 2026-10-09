@@ -99,8 +99,11 @@ class ActivityTests(unittest.TestCase):
             self.assertNotEqual(result['exit_code'],0)
             self.assertIn('expected test failure',result['stderr'])
             with patch('subprocess.run') as run:
-                with self.assertRaises(PermissionError):
+                from fastapi import HTTPException
+                with self.assertRaises(HTTPException) as error:
                     server._execute('system','powershell',{'command':'echo test','privilege':'admin'})
+                self.assertEqual(error.exception.status_code,403)
+                self.assertIn('ADMIN_LAUNCH_FAILED',error.exception.detail)
                 self.assertIn('-Verb RunAs',run.call_args.args[0][-1])
 
 if __name__=='__main__':unittest.main()

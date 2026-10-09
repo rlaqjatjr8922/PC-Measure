@@ -155,3 +155,13 @@ system['powershell'] = {'command': ..., 'privilege': 'normal', 'timeout': 60}
 recording_descriptions = {'config': 'PC 조작 로그 저장 범위(none/program/all) 및 실행 후 스크린샷을 설정합니다. all은 PC에서 직접 누른 키보드와 마우스도 기록합니다.', 'list': 'PC 조작 기록을 시간 범위로 조회합니다. ID, 시간, 입력값, 성공 여부를 포함합니다.'}
 macro_descriptions = {'create': '시작(start)~종료(end) 구간의 기록을 제목(title)이 있는 매크로로 저장합니다. 시간대 포함 ISO 시간을 사용하세요.', 'list': '저장된 매크로 ID, 제목, 기간, 단계 수를 조회합니다.', 'run': 'macro_id로 선택한 매크로를 실제 실행합니다. 긴급 중지로 중단할 수 있습니다.'}
 system_descriptions = {'powershell': 'PowerShell 명령을 normal(일반) 또는 admin(관리자, PC의 UAC 승인 필요) 권한으로 실행합니다.'}
+
+# Keep the original route for compatibility; expose two explicit MCP tools.
+_mcp_excluded.add('system_powershell')
+_mcp_only = {'system_powershell_normal', 'system_powershell_admin'}
+system['powershell_normal'] = {'command': ..., 'timeout': 60}
+system['powershell_admin'] = {'command': ..., 'timeout': 60}
+system_descriptions.update({
+    'powershell_normal': 'PowerShell 명령을 일반 사용자 권한으로 실행합니다. command와 timeout(초)을 받습니다.',
+    'powershell_admin': 'PowerShell 명령을 관리자 권한으로 실행합니다. 일반 권한 서버에서는 PC 사용자가 Windows UAC를 승인해야 합니다. command와 timeout(초)을 받습니다.',
+})

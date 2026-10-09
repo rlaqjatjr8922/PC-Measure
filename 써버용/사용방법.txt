@@ -1,0 +1,13 @@
+1. api-key.txt를 열고 PASTE_API_KEY_HERE를 지운 뒤 API 키만 한 줄로 입력하고 저장하세요.
+   GitHub에서 받은 경우 start.cmd를 처음 실행하면 api-key.txt가 자동 생성됩니다.
+   $env:CONTROL_PLANE_API_KEY= 또는 따옴표는 넣지 마세요.
+2. start.cmd를 더블클릭하세요.
+3. PC-Control-Server의 server.py, 손님용 PC-Measure.exe, pc-control 터널이 실행됩니다.
+
+키가 입력되지 않았으면 실행 시 메모장이 열립니다. 키를 저장하고 메모장을 닫으세요.
+API 키는 이 TXT 파일에 평문으로 저장되므로 파일을 공유하지 마세요.
+서버, PC-Measure, 터널 중 하나라도 종료되면 함께 실행한 나머지 프로그램도 모두 종료됩니다.
+실행 창을 닫거나 Ctrl+C를 눌러도 전체 종료됩니다. 하위 프로세스도 함께 정리됩니다.
+기존 서버 또는 PC-Measure가 실행 중이면 먼저 종료한 뒤 start.cmd를 실행하세요.
+서버 실행 오류는 이 폴더의 server.stderr.log에서 확인할 수 있습니다.
+원본 프로그램 파일은 수정하지 않습니다. 실행한 프로그램은 자체 데이터와 로그를 원래 폴더에 저장할 수 있습니다.
